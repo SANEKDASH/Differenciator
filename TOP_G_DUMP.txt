@@ -1,0 +1,26 @@
+im GetG leading all work
+
+i'm getE reading '+' and '-' op pos 0
+	x^x
+
+i'm getT reading '*' and '/' on pos 0
+	x^x
+
+i'm getP reading '(' and ')' on pos 0
+	x^x
+
+Im GetA[rgument] reading args on pos 0,
+	 string x^x
+
+Im GetV reading variables on pos 0,
+	 string : x^x
+
+i'm getP reading '(' and ')' on pos 2
+	x
+
+Im GetA[rgument] reading args on pos 2,
+	 string x
+
+Im GetV reading variables on pos 2,
+	 string : x
+
