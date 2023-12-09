@@ -6,29 +6,28 @@
 #include "tree_dump.h"
 #include "parse.h"
 
-int main()
+int main(int argc, const char *argv[])
 {
+
     InitTreeGraphDump();
-    char *end = nullptr;
+    Expr expr;
+    Variables vars;
 
-    Tree huy = {0};
-    huy.root = GetG("x^x");
+    VarArrayInit(&vars);
 
-    GRAPH_DUMP_TREE(&huy);
+    expr.string = "cos(x * y)";
+    expr.pos  = 0;
+    Tree func = {0};
 
-    Tree differed_tree = {0};
-    differed_tree.root = DiffTree(huy.root, nullptr);
-    LatexDump(differed_tree.root, "latex.tex");
-    SetParents(differed_tree.root);
+    func.root = GetG(&vars, &expr); // file
+    OptimizeTree(&vars, &func);
+    GRAPH_DUMP_TREE(&func);
 
-    GRAPH_DUMP_TREE(&differed_tree);
-    Variable var = {3};
+    LatexDump(&vars, &func, "latex.tex"); // argv
 
-
-    double a = Eval(differed_tree.root, var);
-    printf("result - %lg\n", a);
-
-    TreeDtor(huy.root);
+    VarArrayDtor(&vars);
+    TreeDtor(func.root);
+    printf("HUY");
     EndTreeGraphDump();
 
     return 0;

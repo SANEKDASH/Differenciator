@@ -43,9 +43,22 @@ DiffErrs_t SetNumber(TreeNode   *node,
 DiffErrs_t SetUpData(TreeNode *node,
                      const char *str);
 
-NumType_t Eval(const TreeNode *node, Variable var);
+NumType_t Eval(Variables      *vars,
+               const TreeNode *node);
 
 TreeNode *DiffTree(const TreeNode *node,
                    TreeNode       *parent_node);
+
+TreeErrs_t OptimizeConstants(Variables *vars,
+                             Tree      *tree,
+                             TreeNode **node);
+
+TreeErrs_t OptimizeNeutralExpr(Tree      *tree,
+                               TreeNode **node);
+
+TreeErrs_t OptimizeTree(Variables *vars,
+                        Tree *tree);
+
+bool IsUnaryOp(const OpCode_t op_code);
 
 #endif

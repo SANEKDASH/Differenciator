@@ -6,6 +6,7 @@
 #include "trees.h"
 #include "tree_dump.h"
 #include "diff.h"
+#include "time.h"
 
 #define SVG
 
@@ -18,9 +19,23 @@ static const char * const log_file_name = "tree.dmp.html";
 static void LogPrintTree(TreeNode *node,
                          FILE     *dot_file);
 
-static bool IsUnaryOp(const OpCode_t op_code);
+static void PrintWithBrackets(Variables *vars,
+                              TreeNode  *node,
+                              FILE      *latex_file);
 
-static void PrintWithBrackets(TreeNode *node, FILE *latex_file);
+static int Factorial(int num);
+
+static const char *FoolStrings[] =
+{
+"-Саня, ты че творишь?\\newline\n-Это рофлс!",
+"Сунул в попу я огурчик, выпил скотч и пукнул в стульчик...\\newline\nA затем получил:",
+"Методом введения в вену ЛСД получено:",
+"Округлим до прямой:",
+"Хуй сосоялти:"
+};
+
+static const size_t kFoolStringsSize = sizeof(FoolStrings) / sizeof(char *);
+
 
 //================================================================================================
 
@@ -57,7 +72,10 @@ void EndTreeGraphDump()
 
 //================================================================================================
 
-TreeErrs_t GraphDumpTree(Tree *tree)
+TreeErrs_t GraphDumpTree(Tree *tree,
+                         const char *file,
+                         const char *func,
+                         const int line)
 {
     FILE *dot_file = fopen("tree.dmp.dot", "w");
 
@@ -99,16 +117,16 @@ TreeErrs_t GraphDumpTree(Tree *tree)
 
 
     fprintf(log_file, "DATE : %s \nTIME : %s\n"
-                      /*"Called from file: %s\n"
+                      "Called from file: %s\n"
                       "Called from function: %s\n"
-                      "Line: %d\n"*/
+                      "Line: %d\n"
                       "<img height=\"150px\" src=\"graphdump%d.svg\">\n"
                       "-----------------------------------------------------------------\n",
-                      /*file,
-                      func,
-                      line,*/
                       __DATE__,
                       __TIME__,
+                      file,
+                      func,
+                      line,
                       call_count);
 
 
@@ -148,8 +166,9 @@ static void LogPrintTree(TreeNode *node,
     else if (node->type == kVariable)
     {
         LOG_PRINT("node%p [style = filled, fillcolor = \"pink\", shape = Mrecord, label = "
-                  "\"data: x | type : variable | {parent: %p | pointer: %p | left: %p | right: %p} \"]\n",
+                  "\"data: %d | type : variable | {parent: %p | pointer: %p | left: %p | right: %p} \"]\n",
                   node,
+                  node->data.variable_pos,
                   node->parent,
                   node,
                   node->left,
@@ -208,10 +227,18 @@ void LogPrintEdges(TreeNode *node,
 
 //================================================================================================
 
-void LatexDump(const TreeNode *node,
+void LatexDump(Variables      *vars,
+               Tree           *func,
                const char     *latex_file_name)
 {
+    system("rm -rf *.pdf");
+    system("rm -rf *.log");
+    system("rm -fr *.aux");
+
     FILE *latex_file = fopen(latex_file_name, "w");
+    static const size_t kMaxCmdLen = 128;
+
+    static char system_cmd[kMaxCmdLen] = {0};
 
     if (latex_file == nullptr)
     {
@@ -223,40 +250,36 @@ void LatexDump(const TreeNode *node,
 
     #define TEX_PRINT(...) fprintf(latex_file, __VA_ARGS__)
 
-    TEX_PRINT("\\documentclass{article}\n"
-              "\\usepackage{graphicx}\n"
-              "\\begin{document}\n"
-              "\\title{РњР°С‚Р°РЅ С…СѓР№РЅРё}\n"
-              "\\maketitle{}\n"
-              "\\date{December 2023}\n");
+    TEX_PRINT(" \\documentclass[a4paper,12pt]{article}\n"
+                 "\\usepackage[T1]{fontenc}\n"
+                 "\\usepackage[utf8]{inputenc}\n"
+                 "\\usepackage[english,russian]{babel}\n"
+                 "\\usepackage{pdfpages}\n"
+                 "\\usepackage{ragged2e}\n"
+                 "\\title{Лабораторная работа номер 2.2.8}\n"
+                 "\\begin{document}\n"
+                 "\\maketitle\n");
 
-    TEX_PRINT("$$");
+    PrintMaclaurinSeries(vars, func, latex_file);
 
-    LatexPrintNode(node, latex_file);
-
-    TEX_PRINT("$$");
     TEX_PRINT("\n\\end{document}");
 
     fclose(latex_file);
+
+    sprintf(system_cmd, "iconv -f CP1251 -t UTF-8 %s > c%s", latex_file_name, latex_file_name);
+    system(system_cmd);
+
+    sprintf(system_cmd, "pdflatex -interaction nonstopmode -halt-on-error -file-line-error c%s", latex_file_name);
+    system(system_cmd);
 }
 
 //================================================================================================
 
-static bool IsUnaryOp(const OpCode_t op_code)
-{
-    return op_code == kSqrt ||
-           op_code == kSin  ||
-           op_code == kCos  ||
-           op_code == kTg   ||
-           op_code == kLn;
-}
-
-//================================================================================================
-
-TreeErrs_t LatexPrintNode(const TreeNode *node,
+TreeErrs_t LatexPrintNode(Variables      *vars,
+                          const TreeNode *node,
                           FILE           *latex_file)
 {
-    #define PRINT_BR(node) PrintWithBrackets(node, latex_file)
+    #define PRINT_BR(node) PrintWithBrackets(vars, node, latex_file)
 
     if (node == nullptr)
     {
@@ -272,7 +295,7 @@ TreeErrs_t LatexPrintNode(const TreeNode *node,
 
     if (node->type == kVariable)
     {
-        TEX_PRINT("x");//many variables
+        TEX_PRINT("%s", vars->var_array[node->data.variable_pos].id);
 
         return kTreeSuccess;
     }
@@ -281,22 +304,22 @@ TreeErrs_t LatexPrintNode(const TreeNode *node,
     {
         case kAdd:
         {
-            LatexPrintNode(node->left, latex_file);
+            LatexPrintNode(vars, node->left, latex_file);
 
             TEX_PRINT("+");
 
-            LatexPrintNode(node->right, latex_file);
+            LatexPrintNode(vars, node->right, latex_file);
 
             break;
         }
 
         case kSub:
         {
-            LatexPrintNode(node->left, latex_file);
+            LatexPrintNode(vars, node->left, latex_file);
 
             TEX_PRINT("-");
 
-            LatexPrintNode(node->right, latex_file);
+            LatexPrintNode(vars, node->right, latex_file);
 
             break;
         }
@@ -304,11 +327,11 @@ TreeErrs_t LatexPrintNode(const TreeNode *node,
         case kDiv:
         {
             TEX_PRINT("%s{", OperationArray[kDiv].tex_str);
-            LatexPrintNode(node->left, latex_file);
+            LatexPrintNode(vars, node->left, latex_file);
             TEX_PRINT("}");
 
             TEX_PRINT("{");
-            LatexPrintNode(node->right, latex_file);
+            LatexPrintNode(vars, node->right, latex_file);
             TEX_PRINT("}");
 
             break;
@@ -318,7 +341,7 @@ TreeErrs_t LatexPrintNode(const TreeNode *node,
         {
             PRINT_BR(node->left);
 
-            TEX_PRINT("%s", OperationArray[kMult].tex_str);
+            TEX_PRINT(" %s ", OperationArray[kMult].tex_str);
 
             PRINT_BR(node->right);
 
@@ -332,7 +355,7 @@ TreeErrs_t LatexPrintNode(const TreeNode *node,
             TEX_PRINT("^");
 
             TEX_PRINT("{");
-            LatexPrintNode(node->right, latex_file);
+            LatexPrintNode(vars, node->right, latex_file);
             TEX_PRINT("}");
 
             break;
@@ -344,7 +367,7 @@ TreeErrs_t LatexPrintNode(const TreeNode *node,
         case kTg:
         case kLn:
         {
-            TEX_PRINT("%s", OperationArray[node->data.op_code].tex_str);
+            TEX_PRINT("%s ", OperationArray[node->data.op_code].tex_str);
             TEX_PRINT("{");
             PRINT_BR(node->right);
             TEX_PRINT("}");
@@ -365,25 +388,101 @@ TreeErrs_t LatexPrintNode(const TreeNode *node,
 
 //================================================================================================
 
-static void PrintWithBrackets(TreeNode *node, FILE *latex_file)
+static void PrintWithBrackets(Variables *vars, TreeNode *node, FILE *latex_file)
 {
     if(node->type != kVariable && node->type != kConstNumber)
     {
         if (!IsUnaryOp(node->data.op_code))
         {
-            TEX_PRINT("(");
+            TEX_PRINT("\\left( ");
         }
     }
 
-    LatexPrintNode(node, latex_file);
+    LatexPrintNode(vars, node, latex_file);
 
     if(node->type != kVariable && node->type != kConstNumber)
     {
         if (!IsUnaryOp(node->data.op_code))
         {
-            TEX_PRINT(")");
+            TEX_PRINT(" \\right)");
         }
     }
+}
+
+//================================================================================================
+
+TreeErrs_t PrintMaclaurinSeries(Variables *vars,
+                                Tree *func,
+                                FILE *latex_file)
+{
+    srand(time(NULL));
+    static const size_t kPrecise = 5;
+
+    Tree diff_tree = {0};
+    diff_tree.root = func->root;
+
+    double coeffs[kPrecise] = {0}; // order
+
+    coeffs[0] = Eval(vars, diff_tree.root);
+
+    TEX_PRINT("$$f(x) = ");
+    LatexPrintNode(vars, diff_tree.root, latex_file);
+    TEX_PRINT("$$\n");
+
+    for (size_t i = 1; i < kPrecise; i++)
+    {
+        TreeNode *tmp = diff_tree.root;
+
+        diff_tree.root = DiffTree(diff_tree.root, nullptr);
+        GRAPH_DUMP_TREE(&diff_tree);
+        OptimizeTree(vars, &diff_tree);
+        GRAPH_DUMP_TREE(&diff_tree);
+
+        TreeDtor(tmp);
+
+        coeffs[i] = Eval(vars, diff_tree.root);
+
+
+        TEX_PRINT("%s\\newline\n", FoolStrings[rand() % kFoolStringsSize]);
+        TEX_PRINT("$$f^{%d}(x) = ", i);
+        LatexPrintNode(vars, diff_tree.root, latex_file);
+        TEX_PRINT("$$\n");
+
+        TEX_PRINT("$$f^{%d}(0) = %lg$$", i, Eval(vars, diff_tree.root));
+    }
+
+    TEX_PRINT("Ряд Маклорена:\\newline\n$$f(x) = ");
+
+    for (size_t i = 0; i < kPrecise; i++)
+    {
+        if (coeffs[i] != 0)
+        {
+            if (i == 0)
+            {
+                TEX_PRINT("\\frac{%lg}{%d} +", coeffs[i], Factorial(i));
+            }
+            else
+            {
+                TEX_PRINT("\\frac{%lg}{%d} \\cdot x^{%d} +", coeffs[i], Factorial(i), i);
+            }
+        }
+    }
+
+    TEX_PRINT("O(x^%d)$$", kPrecise);
+
+    TreeDtor(diff_tree.root);
+}
+
+//================================================================================================
+
+static int Factorial(int num)
+{
+    if (num == 1 || num == 0)
+    {
+        return 1;
+    }
+
+    return num * Factorial(num - 1);
 }
 
 //================================================================================================

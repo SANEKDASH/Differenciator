@@ -7,29 +7,83 @@
 
 static const char *output_file_name = "TOP_G_DUMP.txt";
 static FILE *output_file = nullptr;
-static const char *string = nullptr;
-static int         pos    = 0;
+
 
 #define LOG_PRINT(...) fprintf(output_file, __VA_ARGS__);
 
-static void SkipSpaces();
+static void SkipSpaces(Expr *expr);
 
-TreeNode *GetG(const char *str)
+static const size_t kBaseVarCount = 16;
+
+static const size_t kMaxIdLen = 64;
+
+int VarArrayInit(Variables *vars)
 {
-    output_file = fopen(output_file_name, "w");
+    vars->var_array = (Variable *) calloc(kBaseVarCount, sizeof(Variable));
 
+    if (vars->var_array == nullptr)
+    {
+        return -1;
+    }
+
+    vars->size = kBaseVarCount;
+
+    vars->var_count = 0;
+
+    return 0;
+}
+
+int SeekVariable(Variables *vars, const char *var_name)
+{
+    for (size_t i = 0; i < vars->var_count; i++)
+    {
+        printf("\nVAR %s - %s\n", vars->var_array[i].id, var_name);
+        if (strcmp(var_name, vars->var_array[i].id) == 0)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+int AddVar(Variables *vars, const char *var_name)
+{
+    vars->var_array[vars->var_count].id    = strdup(var_name);
+    vars->var_array[vars->var_count].value = 0;
+
+    ++vars->var_count;
+    printf("count %d\n", vars->var_count);
+    return vars->var_count;
+}
+
+int VarArrayDtor(Variables *vars)
+{
+    free(vars->var_array);
+    vars->var_array = nullptr;
+
+    vars->size = vars->var_count = 0;
+
+    return 0;
+}
+
+
+TreeNode *GetG(Variables *vars, Expr *expr) // !!!! rename
+{
+    #define CUR_CHAR expr->string[expr->pos]
+    #define STRING   expr->string
+    #define POS      expr->pos
+
+    output_file = fopen(output_file_name, "w");
     LOG_PRINT("im GetG leading all work\n\n");
 
-    string = str;
-    pos    = 0;
+    TreeNode *node = GetE(vars, expr);
 
-    TreeNode *node = GetE();
+    SkipSpaces(expr);
 
-    SkipSpaces();
-
-    if (string[pos] != '\0')
+    if (CUR_CHAR != '\0')
     {
-        printf("GetG() syntax error pos %d, string %s\n", pos, string + pos);
+        printf("GetG() syntax error pos %d, string %s\n", POS, STRING + POS);
 
         return nullptr;
     }
@@ -43,50 +97,50 @@ TreeNode *GetG(const char *str)
     return node;
 }
 
-TreeNode *GetP()
+TreeNode *GetP(Variables *vars, Expr *expr)
 {
-    LOG_PRINT("i'm getP reading '(' and ')' on pos %d\n\t%s\n\n", pos, string + pos);
+    LOG_PRINT("i'm getP reading '(' and ')' on pos %d\n\t%s\n\n", POS, STRING+ POS);
 
     TreeNode *node = 0;
 
-    SkipSpaces();
+    SkipSpaces(expr);
 
-    if (string[pos] == '(')
+    if (CUR_CHAR == '(')
     {
-        pos++;
+        POS++;
 
-        node = GetE();
+        node = GetE(vars, expr);
 
-        SkipSpaces();
+        SkipSpaces(expr);
 
-        if (string[pos] != ')')
+        if (CUR_CHAR != ')')
         {
-            printf("GetP() syntax error pos %d, string %s\n", pos, string + pos);
+            printf("GetP() syntax error pos %d, string %s\n", POS, STRING+ POS);
         }
 
-        ++pos;
+        ++POS;
 
         return node;
     }
     else
     {
-        return GetA();
+        return GetA(vars, expr);
     }
 }
 
-TreeNode *GetT()
+TreeNode *GetT(Variables *vars, Expr *expr)
 {
-    LOG_PRINT("i'm getT reading '*' and '/' on pos %d\n\t%s\n\n", pos, string + pos);
+    LOG_PRINT("i'm getT reading '*' and '/' on pos %d\n\t%s\n\n", POS, STRING+ POS);
 
-    TreeNode* node_lhs = GetP();
+    TreeNode* node_lhs = GetP(vars, expr);
 
-    while (string[pos] == '*' || string[pos] == '/' || string[pos] == '^')
+    while (CUR_CHAR == '*' || CUR_CHAR == '/' || CUR_CHAR == '^')
     {
-        char op = string[pos];
+        char op = CUR_CHAR;
 
-        pos++;
+        POS++;
 
-        TreeNode *node_rhs = GetP();
+        TreeNode *node_rhs = GetP(vars, expr);
 
         switch (op)
         {
@@ -124,7 +178,7 @@ TreeNode *GetT()
 
             default:
             {
-                printf("GetT() syntax error pos %d, string %s\n", pos, string + pos);
+                printf("GetT() syntax error pos %d, string %s\n", POS, STRING+ POS);
             }
         }
     }
@@ -132,34 +186,34 @@ TreeNode *GetT()
     return node_lhs;
 }
 
-TreeNode *GetA()
+TreeNode *GetA(Variables *vars, Expr *expr)
 {
-    LOG_PRINT("Im GetA[rgument] reading args on pos %d,\n\t string %s\n\n", pos, string + pos);
-    SkipSpaces();
+    LOG_PRINT("Im GetA[rgument] reading args on pos %d,\n\t string %s\n\n", POS, STRING+ POS);
+    SkipSpaces(expr);
 
-    if (isdigit(string[pos]) || string[pos] == '-')
+    if (isdigit(CUR_CHAR) || CUR_CHAR == '-')
     {
-        return GetN();
+        return GetN(vars, expr);
     }
     else
     {
-        return GetId();
+        return GetId(vars, expr);
     }
 }
 
-TreeNode *GetE()
+TreeNode *GetE(Variables *vars, Expr *expr)
 {
-    LOG_PRINT("i'm getE reading '+' and '-' op pos %d\n\t%s\n\n", pos, string + pos);
+    LOG_PRINT("i'm getE reading '+' and '-' op pos %d\n\t%s\n\n", POS, STRING+ POS);
 
-    TreeNode *node_lhs = GetT();
+    TreeNode *node_lhs = GetT(vars, expr);
 
-    while (string[pos] == '+' || string[pos] == '-')
+    while (CUR_CHAR == '+' || CUR_CHAR == '-')
     {
-        char op = string[pos];
+        char op = CUR_CHAR;
 
-        pos++;
+        POS++;
 
-        TreeNode *node_rhs = GetT();
+        TreeNode *node_rhs = GetT(vars, expr);
 
         switch (op)
         {
@@ -187,7 +241,7 @@ TreeNode *GetE()
 
             default:
             {
-                printf("GetE() syntax error pos %d, string %s\n", pos, string + pos);
+                printf("GetE() syntax error pos %d, string %s\n", POS, STRING+ POS);
             }
         }
     }
@@ -195,26 +249,26 @@ TreeNode *GetE()
     return node_lhs;
 }
 
-TreeNode* GetN()
+TreeNode* GetN(Variables *vars, Expr *expr)
 {
-    LOG_PRINT("i'm getN reading numbers on pos %d\n\t%s\n\n", pos, string + pos);
+    LOG_PRINT("i'm getN reading numbers on pos %d\n\t%s\n\n", POS, STRING+ POS);
 
-    SkipSpaces();
+    SkipSpaces(expr);
 
     int val = 0;
-    size_t old_pos = pos;
+    size_t old_pos = POS;
     char *num_end = nullptr;
 
-    val = strtod(string + pos, &num_end);
+    val = strtod(STRING+ POS, &num_end);
 
-    pos += num_end - string - pos;
+    POS = num_end - STRING;
 
-    if (pos <= old_pos)
+    if (POS <= old_pos)
     {
-        printf("GetN() syntax error pos %d, string %s\n", pos, string + pos);
+        printf("GetN() syntax error pos %d, string %s\n", POS, STRING + POS);
     }
 
-    SkipSpaces();
+    SkipSpaces(expr);
 
     return NodeCtor(nullptr,
                     nullptr,
@@ -223,72 +277,86 @@ TreeNode* GetN()
                     val);
 }
 
-TreeNode *GetId()
+TreeNode *GetId(Variables *vars, Expr *expr)
 {
-    LOG_PRINT("Im GetV reading variables on pos %d,\n\t string : %s\n\n", pos, string + pos);
+    LOG_PRINT("Im GetV reading variables on pos %d,\n\t string : %s\n\n", POS, STRING + POS);
 
-    SkipSpaces();
+    SkipSpaces(expr);
 
-    if (strncmp(string + pos, "cos(", 4) == 0)
+    if (strncmp(STRING + POS, "cos(", 4) == 0)
     {
-        pos += 3;
+        POS += 3;
 
         return NodeCtor(nullptr,
                         nullptr,
-                        GetP(),
+                        GetP(vars, expr),
                         kOperator,
                         kCos);
     }
-    else if (strncmp(string + pos, "sin(", 4) == 0)
+    else if (strncmp(STRING + POS, "sin(", 4) == 0)
     {
-        pos += 3;
+        POS += 3;
 
         return NodeCtor(nullptr,
                         nullptr,
-                        GetP(),
+                        GetP(vars, expr),
                         kOperator,
                         kSin);
     }
-    else if (strncmp(string + pos, "ln(", 3) == 0)
+    else if (strncmp(STRING + POS, "ln(", 3) == 0)
     {
-        pos += 2;
+        POS += 2;
 
         return NodeCtor(nullptr,
                         nullptr,
-                        GetP(),
+                        GetP(vars, expr),
                         kOperator,
                         kLn);
     }
-    else if (strncmp(string + pos, "tg(", 3) == 0)
+    else if (strncmp(STRING + POS, "tg(", 3) == 0)
     {
-        pos += 2;
+        POS += 2;
 
         return NodeCtor(nullptr,
                         nullptr,
-                        GetP(),
+                        GetP(vars, expr),
                         kOperator,
                         kTg);
     }
 
+    static char var_name[kMaxIdLen] = {0};
+    var_name[0] = '\0';
+    size_t i = 0;
 
-    while (isalpha(string[pos]))
+    while (isalpha(CUR_CHAR))
     {
-        ++pos;
+        var_name[i++] = CUR_CHAR;
+        ++POS;
+    }
+    var_name[i] = '\0';
+
+    int var_pos = SeekVariable(vars, var_name);
+    printf("pos %d",var_pos);
+    if (var_pos < 0)
+    {
+        var_pos = AddVar(vars, var_name);
+    printf("pos %d",var_pos);
+
     }
 
-    SkipSpaces();
+    SkipSpaces(expr);
 
     return NodeCtor(nullptr,//check null str
                     nullptr,
                     nullptr,
                     kVariable,
-                    0);
+                    var_pos);
 }
 
-static void SkipSpaces()
+static void SkipSpaces(Expr *expr)
 {
-    while (isspace(string[pos]))
+    while (isspace(CUR_CHAR))
     {
-        pos++;
+        POS++;
     }
 }

@@ -20,7 +20,7 @@ typedef enum
     kTg   = 7,
     kLn   = 8,
     kExp  = 9,
-    kNotAnOperation = 1,
+    kNotAnOperation,
 } OpCode_t;
 
 typedef enum
@@ -38,7 +38,15 @@ typedef enum
     kFailedToFind,
     kFailedToReadText,
     kFailedToReadTree,
+    kTreeOptimized,
+    kTreeNotOptimized,
 } TreeErrs_t;
+
+typedef enum
+{
+    kChanged,
+    kNotChanged,
+} Changes_t; // bool
 
 union NodeData
 {
@@ -61,18 +69,18 @@ struct TreeNode
 struct Tree
 {
     TreeNode *root;
-    size_t status;
+
+    Changes_t status; // ????
 };
 
 
-static const char kGoLeft  = 0;
+static const char kGoLeft  = 0; // enum
 static const char kGoRight = 1;
 
 
 TreeErrs_t TreeVerify(Tree *tree);
 
-TreeErrs_t TreeCtor(Tree *tree,
-                    TreeDataType_t root_val);
+TreeErrs_t TreeCtor(Tree *tree);
 
 TreeErrs_t s_NodeCtor(Tree                  *tree,
                       TreeNode              *parent_node,

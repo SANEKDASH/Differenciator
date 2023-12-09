@@ -6,8 +6,14 @@
 #include "diff.h"
 #include "debug/debug.h"
 #include "parse.h"
+#include "tree_dump.h"
 
-#define NUM_CTOR(num) NodeCtor(nullptr, nullptr, nullptr, kConstNumber, num)
+static bool IsValZero( const TreeNode *node);
+static bool IsValOne(  const TreeNode *node);
+static bool IsNumber(  const TreeNode *node);
+static bool IsVariable(const TreeNode *node);
+
+static TreeErrs_t ReconnectTree(TreeNode **dest, TreeNode *src);
 
 OpCode_t SeekOperator(const char *op_str)
 {
@@ -77,7 +83,8 @@ DiffErrs_t SetUpData(TreeNode   *node,
 
 //==============================================================================
 
-NumType_t Eval(const TreeNode *node, Variable var)
+NumType_t Eval(Variables      *vars,
+               const TreeNode *node)
 {
     if (node == nullptr)
     {
@@ -91,11 +98,11 @@ NumType_t Eval(const TreeNode *node, Variable var)
 
     if (node->type == kVariable)
     {
-        return var.value;
+        return vars->var_array[node->data.variable_pos].value;
     }
 
-    NumType_t left  = Eval(node->left, var);
-    NumType_t right = Eval(node->right, var);
+    NumType_t left  = Eval(vars, node->left);
+    NumType_t right = Eval(vars, node->right);
 
     switch (node->data.op_code)
     {
@@ -165,6 +172,20 @@ NumType_t Eval(const TreeNode *node, Variable var)
 TreeNode *DiffTree(const TreeNode *node,
                    TreeNode       *parent_node)
 {
+    #define NUM_CTOR(num)          NodeCtor(nullptr, nullptr, nullptr, kConstNumber, num)
+    #define VAR_CTOR(val)          NodeCtor(nullptr, nullptr, nullptr, kVariable, val)
+
+    #define ADD_CTOR(left, right)  NodeCtor(nullptr, left, right, kOperator, kAdd)
+    #define SUB_CTOR(left, right)  NodeCtor(nullptr, left, right, kOperator, kSub)
+    #define DIV_CTOR(left, right)  NodeCtor(nullptr, left, right, kOperator, kDiv)
+    #define MULT_CTOR(left, right) NodeCtor(nullptr, left, right, kOperator, kMult)
+    #define SQRT_CTOR(right)       NodeCtor(nullptr, nullptr, right, kOperator, kSqrt)
+    #define SIN_CTOR(right)        NodeCtor(nullptr, nullptr, right, kOperator, kSin)
+    #define COS_CTOR(right)        NodeCtor(nullptr, nullptr, right, kOperator, kCos)
+    #define TG_CTOR(right)         NodeCtor(nullptr, nullptr, right, kOperator, kTg)
+    #define LN_CTOR(right)         NodeCtor(nullptr, nullptr, right, kOperator, kLn)
+    #define POW_CTOR(left, right)  NodeCtor(nullptr, left, right, kOperator, kExp)
+
     #define D(node) DiffTree(node, nullptr)
     #define C(node) CopyNode(node, nullptr)
 
@@ -184,68 +205,38 @@ TreeNode *DiffTree(const TreeNode *node,
     {
         case kAdd:
         {
-            return NodeCtor(parent_node,
-                            D(node->left),
-                            D(node->right),
-                            kOperator,
-                            kAdd);
+            return ADD_CTOR(D(node->left),
+                            D(node->right));
 
             break;
         }
 
         case kSub:
         {
-            return NodeCtor(parent_node,
-                            D(node->left),
-                            D(node->right),
-                            kOperator,
-                            kSub);
+            return SUB_CTOR(D(node->left),
+                            D(node->right));
 
             break;
         }
 
         case kMult:
         {
-                return NodeCtor(node->parent,
-                                NodeCtor(nullptr,
-                                         D(node->left),
-                                         C(node->right),
-                                         kOperator,
-                                         kMult),
-                                NodeCtor(nullptr,
-                                         C(node->left),
-                                         D(node->right),
-                                         kOperator,
-                                         kMult),
-                                kOperator,
-                                kAdd);
+                return ADD_CTOR(MULT_CTOR(D(node->left),
+                                          C(node->right)),
+                                MULT_CTOR(C(node->left),
+                                          D(node->right)));
 
             break;
         }
 
         case kDiv:
         {
-            return NodeCtor(node->parent,
-                            NodeCtor(nullptr,
-                                     NodeCtor(nullptr,
-                                              D(node->left),
-                                              C(node->right),
-                                              kOperator,
-                                              kMult),
-                                     NodeCtor(nullptr,
-                                              C(node->left),
-                                              D(node->right),
-                                              kOperator,
-                                              kMult),
-                                     kOperator,
-                                     kSub),
-                             NodeCtor(nullptr,
-                                      C(node->right),
-                                      NUM_CTOR(2),
-                                      kOperator,
-                                      kExp),
-                            kOperator,
-                            kDiv);
+            return DIV_CTOR(SUB_CTOR(MULT_CTOR(D(node->left),
+                                               C(node->right)),
+                                     MULT_CTOR(C(node->left),
+                                               D(node->right))),
+                            POW_CTOR(C(node->right),
+                                     NUM_CTOR(2)));
 
             break;
 
@@ -253,95 +244,50 @@ TreeNode *DiffTree(const TreeNode *node,
 
         case kCos:
         {
-            return NodeCtor(parent_node,
-                            NodeCtor(nullptr,
-                                     NUM_CTOR(-1),
-                                     NodeCtor(nullptr,
-                                              nullptr,
-                                              C(node->right),
-                                              kOperator,
-                                              kSin),
-                                     kOperator,
-                                     kMult),
-                            D(node->right),
-                            kOperator,
-                            kMult);
+            return MULT_CTOR(MULT_CTOR(NUM_CTOR(-1),
+                                       SIN_CTOR(C(node->right))),
+                             D(node->right));
         }
 
         case kSin:
         {
-            return NodeCtor(parent_node,
-                            NodeCtor(nullptr,
-                                     nullptr,
-                                     C(node->right),
-                                     kOperator,
-                                     kCos),
-                            D(node->right),
-                            kOperator,
-                            kMult);
+            return MULT_CTOR(COS_CTOR(C(node->right)),
+                             D(node->right));
         }
 
         case kTg:
         {
-            return NodeCtor(parent_node,
-                            NodeCtor(nullptr,
-                                     NUM_CTOR(1),
-                                     NodeCtor(nullptr,
-                                              NodeCtor(nullptr,
-                                                       nullptr,
-                                                       C(node->right),
-                                                       kOperator,
-                                                       kCos),
-                                              NUM_CTOR(2),
-                                              kOperator,
-                                              kExp),
-                                     kOperator,
-                                     kDiv),
-                            D(node->right),
-                            kOperator,
-                            kMult);
+            return MULT_CTOR(DIV_CTOR(NUM_CTOR(1),
+                                      POW_CTOR(COS_CTOR(C(node->right)),
+                                               NUM_CTOR(2))),
+                             D(node->right));
         }
 
         case kLn:
         {
-            return NodeCtor(parent_node,
-                            NodeCtor(nullptr,
-                                     NUM_CTOR(1),
-                                     C(node->right),
-                                     kOperator,
-                                     kDiv),
-                            D(node->right),
-                            kOperator,
-                            kMult);
+            return MULT_CTOR(DIV_CTOR(NUM_CTOR(1),
+                                      C(node->right)),
+                             D(node->right));
         }
 
         case kExp:
         {
-            return NodeCtor(parent_node,
-                            C(node),
-                            NodeCtor(nullptr,
-                                     NodeCtor(nullptr,
-                                              NodeCtor(nullptr,
-                                                       C(node->right),
-                                                       C(node->left),
-                                                       kOperator,
-                                                       kDiv),
-                                              D(node->left),
-                                              kOperator,
-                                              kMult),
-                                     NodeCtor(nullptr,
-                                              D(node->right),
-                                              NodeCtor(nullptr,
-                                                       nullptr,
-                                                       C(node->left),
-                                                       kOperator,
-                                                       kLn),
-                                              kOperator,
-                                              kMult),
-                                     kOperator,
-                                     kAdd),
-                            kOperator,
-                            kMult);
+            if (IsVariable(node->left) && IsNumber(node->right) && !IsValZero(node->right))
+            {
+                return POW_CTOR(VAR_CTOR(0), NUM_CTOR(node->right->data.const_val - 1));
+            }
+
+            if (IsVariable(node->right) && IsNumber(node->left) && !IsValZero(node->left))
+            {
+                return POW_CTOR(VAR_CTOR(0), NUM_CTOR(node->left->data.const_val - 1));
+            }
+
+            return MULT_CTOR(C(node),
+                             ADD_CTOR(MULT_CTOR(DIV_CTOR(C(node->right),
+                                                         C(node->left)),
+                                                D(node->left)),
+                                      MULT_CTOR(D(node->right),
+                                                LN_CTOR(C(node->left)))));
         }
 
         default:
@@ -356,3 +302,251 @@ TreeNode *DiffTree(const TreeNode *node,
 }
 
 //==============================================================================
+
+TreeErrs_t OptimizeConstants(Variables *vars,
+                             Tree      *tree,
+                             TreeNode **node)
+{
+    if ((*node)->type == kConstNumber || (*node)->type == kVariable)
+    {
+        return kTreeNotOptimized;
+    }
+
+    if (!IsUnaryOp((*node)->data.op_code))
+    {
+        if ((*node)->left->type  == kConstNumber &&
+            (*node)->right->type == kConstNumber)
+        {
+
+            NumType_t val = Eval(vars, *node);
+
+            TreeDtor(*node);
+
+            *node = NUM_CTOR(val);
+
+            return kTreeOptimized;
+        }
+    }
+
+    if ((*node)->left != nullptr)
+    {
+        if (OptimizeConstants(vars, tree, &(*node)->left) == kTreeOptimized)
+        {
+            return kTreeOptimized;
+        }
+    }
+
+    if ((*node)->right != nullptr)
+    {
+        if (OptimizeConstants(vars, tree, &(*node)->right) == kTreeOptimized)
+        {
+            return kTreeOptimized;
+        }
+    }
+
+    return kTreeNotOptimized;
+}
+
+//==============================================================================
+
+
+TreeErrs_t OptimizeNeutralExpr(Tree      *tree,
+                               TreeNode **node)
+{
+    if ((*node)->type == kConstNumber || (*node)->type == kVariable)
+    {
+        return kTreeSuccess;;
+    }
+
+    switch ((*node)->data.op_code)
+    {
+        case kAdd:
+        {
+            if (IsValZero((*node)->right))
+            {
+                ReconnectTree(node, C((*node)->left));
+
+                return kTreeOptimized;
+            }
+            if (IsValZero((*node)->left))
+            {
+                ReconnectTree(node, C((*node)->right));
+
+                return kTreeOptimized;
+            }
+
+            break;
+        }
+
+        case kSub:
+        {
+            if (IsValZero((*node)->right))
+            {
+                ReconnectTree(node, C((*node)->left));
+
+                return kTreeOptimized;
+            }
+
+            break;
+        }
+
+        case kMult:
+        {
+            if (IsValZero((*node)->left) || IsValZero((*node)->right))
+            {
+                ReconnectTree(node, NUM_CTOR(0));
+
+                return kTreeOptimized;
+            }
+
+            if (IsValOne((*node)->left))
+            {
+                ReconnectTree(node, C((*node)->right));
+
+                return kTreeOptimized;
+            }
+
+            if (IsValOne((*node)->right))
+            {
+                ReconnectTree(node, C((*node)->left));
+
+                return kTreeOptimized;
+            }
+
+            break;
+        }
+
+        case kDiv:
+        {
+            if (IsValZero((*node)->left))
+            {
+                ReconnectTree(node, NUM_CTOR(0));
+
+                return kTreeOptimized;
+            }
+
+            if (IsValOne((*node)->right))
+            {
+                ReconnectTree(node, C((*node)->left));
+
+                return kTreeOptimized;
+            }
+
+            break;
+        }
+
+        case kExp:
+        {
+            if (IsValZero((*node)->right))
+            {
+                ReconnectTree(node, NUM_CTOR(1));
+
+                return kTreeOptimized;
+            }
+
+            if (IsValOne((*node)->left))
+            {
+                ReconnectTree(node, NUM_CTOR(1));
+
+                return kTreeOptimized;
+            }
+
+            break;
+        }
+    }
+
+    if ((*node)->left != nullptr)
+    {
+        if (OptimizeNeutralExpr(tree, &(*node)->left) == kTreeOptimized)
+        {
+            return kTreeOptimized;
+        }
+    }
+
+    if ((*node)->right != nullptr)
+    {
+        if (OptimizeNeutralExpr(tree, &(*node)->right) == kTreeOptimized)
+        {
+            return kTreeOptimized;
+        }
+    }
+
+    return kTreeNotOptimized;
+}
+
+//==============================================================================
+
+TreeErrs_t OptimizeTree(Variables *vars,
+                        Tree *tree)
+{
+    while (true)
+    {
+
+        TreeErrs_t status_1 = OptimizeNeutralExpr(tree, &tree->root);
+        //GRAPH_DUMP_TREE(tree);
+
+        TreeErrs_t status_2 = OptimizeConstants(vars, tree, &tree->root);
+        //GRAPH_DUMP_TREE(tree);
+
+        if (status_1 == kTreeNotOptimized && status_2 == kTreeNotOptimized)
+        {
+            break;
+        }
+
+        tree->status = kNotChanged;
+    }
+
+    GRAPH_DUMP_TREE(tree);
+
+    return kTreeSuccess;
+}
+
+//==============================================================================
+
+bool IsUnaryOp(const OpCode_t op_code)
+{
+    return op_code == kSqrt ||
+           op_code == kSin  ||
+           op_code == kCos  ||
+           op_code == kTg   ||
+           op_code == kLn;
+}
+
+//==============================================================================
+
+static bool IsValZero(const TreeNode *node)
+{
+    return  (node->type == kConstNumber) && (node->data.const_val == 0);
+}
+
+//==============================================================================
+
+static bool IsValOne(const TreeNode *node)
+{
+    return (node->type == kConstNumber) && (node->data.const_val == 1);
+}
+
+//==============================================================================
+
+static bool IsVariable(const TreeNode *node)
+{
+    return (node->type == kVariable);
+}
+
+//==============================================================================
+
+static bool IsNumber(const TreeNode *node)
+{
+    return (node->type == kConstNumber);
+}
+
+//==============================================================================
+
+static TreeErrs_t ReconnectTree(TreeNode **dest, TreeNode *src)
+{
+    TreeDtor(*dest);
+
+    *dest = src;
+
+    return kTreeSuccess;
+}

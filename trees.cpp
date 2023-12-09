@@ -49,24 +49,16 @@ static TreeErrs_t CreateNodeFromInfixBrackets(Tree      *tree,
 
 //==============================================================================
 
-TreeErrs_t TreeCtor(Tree           *tree,
-                    TreeDataType_t  root_val)
+TreeErrs_t TreeCtor(Tree *tree)
 {
     CHECK(tree);
 
-    tree->root = (TreeNode *) calloc(1, sizeof(TreeNode));
-
-    if (tree->root == nullptr)
-    {
-        perror("TreeCtor() failed to allocate memory");
-
-        return kFailedAllocation;
-    }
-
-    SetUpData(tree->root, root_val);
+    tree->root = nullptr;
 
     tree->root->left  = nullptr;
     tree->root->right = nullptr;
+
+    tree->status = kNotChanged;
 
     return kTreeSuccess;
 }
@@ -80,8 +72,6 @@ TreeErrs_t TreeDtor(TreeNode *root)
         return kTreeSuccess;
     }
 
-    //root->data = 0;
-
     if (root->left != nullptr)
     {
         TreeDtor(root->left);
@@ -93,6 +83,7 @@ TreeErrs_t TreeDtor(TreeNode *root)
     }
 
     free(root);
+
 
     return kTreeSuccess;
 }

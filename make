@@ -3,7 +3,7 @@ CFLAGS=-c -Wall -Wshadow -Winit-self -Wredundant-decls -Wcast-align -Wundef -Wfl
 LDFLAGS=
 SOURCES=main.cpp trees.cpp tree_dump.cpp debug/debug.cpp TextParse/text_parse.cpp debug/color_print.cpp Stack/stack.cpp diff.cpp parse.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
-EXECUTABLE=Tree
+EXECUTABLE=Diff
 
 all: $(SOURCES) $(EXECUTABLE)
 
@@ -14,10 +14,10 @@ $(EXECUTABLE): $(OBJECTS)
 	$(CC) $(CFLAGS) $< -o $@
 
 clean:
-	rm -rf *.o Tree
-	rm -rf *.exe Tree
-	rm -rf *.html Tree
-	rm -rf *.bin Tree
-	rm -rf *.svg Tree
-	rm -rf *.dot Tree
-	rm -rf *.png Tree
+	rm -rf *.o Diff
+	rm -rf *.exe Diff
+	rm -rf *.html Diff
+	rm -rf *.bin Diff
+	rm -rf *.svg Diff
+	rm -rf *.dot Diff
+	rm -rf *.png Diff
