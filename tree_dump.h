@@ -10,6 +10,20 @@
 #define GRAPH_DUMP_TREE ;
 #endif
 
+struct Replace
+{
+    TreeNode *node;
+    char id;
+};
+
+struct Replaces
+{
+    size_t curr_depth = 0;
+    Replace *rep_array;
+    size_t rep_count;
+};
+
+
 TreeErrs_t GraphDumpTree(Tree *tree,
                          const char *file,
                          const char *func,
@@ -26,12 +40,13 @@ void LatexDump(Variables      *vars,
                Tree           *func,
                const char     *latex_file_name);
 
-TreeErrs_t LatexPrintNode(Variables      *vars,
+TreeErrs_t LatexPrintNode(Replaces       *reps,
+                          Variables      *vars,
                           const TreeNode *node,
                           FILE           *latex_file);
 
 TreeErrs_t PrintMaclaurinSeries(Variables *vars,
-                                Tree *func,
-                                FILE *latex_file);
+                                Tree      *func,
+                                FILE      *latex_file);
 
 #endif

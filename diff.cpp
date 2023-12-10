@@ -123,7 +123,14 @@ NumType_t Eval(Variables      *vars,
 
         case kDiv:
         {
-            return left / right;
+            if (right != 0)
+            {
+                return left / right;
+            }
+            else
+            {
+                return NAN;
+            }
         }
 
         case kSqrt:
@@ -272,14 +279,22 @@ TreeNode *DiffTree(const TreeNode *node,
 
         case kExp:
         {
-            if (IsVariable(node->left) && IsNumber(node->right) && !IsValZero(node->right))
+            if (!IsValZero(node->right))
             {
-                return POW_CTOR(VAR_CTOR(0), NUM_CTOR(node->right->data.const_val - 1));
-            }
-
-            if (IsVariable(node->right) && IsNumber(node->left) && !IsValZero(node->left))
-            {
-                return POW_CTOR(VAR_CTOR(0), NUM_CTOR(node->left->data.const_val - 1));
+                if (IsNumber(node->right))
+                {
+                    if (IsVariable(node->left))
+                    {
+                        return MULT_CTOR(NUM_CTOR(node->right->data.const_val),
+                                         POW_CTOR(VAR_CTOR(0),
+                                                  NUM_CTOR(node->right->data.const_val - 1)));
+                    }
+                    else
+                    {
+                        return MULT_CTOR(POW_CTOR(C(node->left),
+                                         NUM_CTOR(node->right->data.const_val - 1)), D(node->left));
+                    }
+                }
             }
 
             return MULT_CTOR(C(node),
@@ -447,6 +462,13 @@ TreeErrs_t OptimizeNeutralExpr(Tree      *tree,
             if (IsValOne((*node)->left))
             {
                 ReconnectTree(node, NUM_CTOR(1));
+
+                return kTreeOptimized;
+            }
+
+            if (IsValOne((*node)->right))
+            {
+                ReconnectTree(node, C((*node)->left));
 
                 return kTreeOptimized;
             }

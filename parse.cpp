@@ -37,7 +37,6 @@ int SeekVariable(Variables *vars, const char *var_name)
 {
     for (size_t i = 0; i < vars->var_count; i++)
     {
-        printf("\nVAR %s - %s\n", vars->var_array[i].id, var_name);
         if (strcmp(var_name, vars->var_array[i].id) == 0)
         {
             return i;
@@ -53,7 +52,6 @@ int AddVar(Variables *vars, const char *var_name)
     vars->var_array[vars->var_count].value = 0;
 
     ++vars->var_count;
-    printf("count %d\n", vars->var_count);
     return vars->var_count;
 }
 
@@ -336,11 +334,9 @@ TreeNode *GetId(Variables *vars, Expr *expr)
     var_name[i] = '\0';
 
     int var_pos = SeekVariable(vars, var_name);
-    printf("pos %d",var_pos);
     if (var_pos < 0)
     {
         var_pos = AddVar(vars, var_name);
-    printf("pos %d",var_pos);
 
     }
 

@@ -3,7 +3,7 @@
 
 #include "trees.h"
 
-typedef double VarVal_t;
+typedef double VarType_t;
 
 struct Expr
 {
@@ -15,12 +15,13 @@ struct Variable
 {
     char *id = nullptr;
 
-    VarVal_t value = 0;;
+    VarType_t value = 0;;
 
 };
 
 struct Variables
 {
+    VarType_t type;
     Variable *var_array;
     size_t size;
     size_t var_count;

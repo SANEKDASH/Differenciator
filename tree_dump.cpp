@@ -19,23 +19,56 @@ static const char * const log_file_name = "tree.dmp.html";
 static void LogPrintTree(TreeNode *node,
                          FILE     *dot_file);
 
-static void PrintWithBrackets(Variables *vars,
-                              TreeNode  *node,
-                              FILE      *latex_file);
+static void PrintWithBrackets(Replaces *reps,
+                              Variables *vars,
+                              TreeNode *node,
+                              FILE *latex_file);
+
 
 static int Factorial(int num);
 
 static const char *FoolStrings[] =
 {
-"-Саня, ты че творишь?\\newline\n-Это рофлс!",
-"Сунул в попу я огурчик, выпил скотч и пукнул в стульчик...\\newline\nA затем получил:",
-"Методом введения в вену ЛСД получено:",
-"Округлим до прямой:",
-"Хуй сосоялти:"
+    "-Саня ты че творишь?\\newline\n-Это рофлс!",
+    "Сунул в попу я огурчик, выпил скотч и пукнул в стульчик...\\newline\nA потом получил:",
+    "Методом введения ЛСД в вену получили:",
+    "Округлим до прямой:",
+    "Очевидно, что:"
 };
 
 static const size_t kFoolStringsSize = sizeof(FoolStrings) / sizeof(char *);
 
+static TreeErrs_t RepCtor(Replaces *reps);
+
+static TreeErrs_t RepDtor(Replaces *reps);
+
+static TreeErrs_t MakeReplace(Replaces  *reps,
+                              size_t    *depth,
+                              TreeNode **node);
+
+static size_t AddReplace(Replaces *reps,
+                         TreeNode *node);
+
+static void PasteImage(FILE       *latex_file,
+                       const char *image_name);
+
+static void PrintReps(Replaces *reps,
+                      Variables *vars,
+                      FILE *latex_file);
+
+static const char *transpos_latex_string = "\\makeatletter\n"
+                                            "\\newenvironment{wrapeqn}[2][.9\\displaywidth]\n"
+                                            "{\\begin{minipage}{#1}\\openup\\jot\\change@operations\n"
+                                            "\\@hangfrom{$\\displaystyle#2{}$}$\\displaystyle}\n"
+                                            "{$\\end{minipage}}\n"
+                                            "\\newcommand{\\change@operations}{%\n"
+                                            "\\begingroup\\lccode`~=`+\\lowercase{\\endgroup\\let~}\\prebin@plus\n"
+                                            "\\begingroup\\lccode`~=`-\\lowercase{\\endgroup\\let~}\\prebin@minus\n"
+                                            "\\mathcode`+=\"8000 \\mathcode`-=\"8000\n"
+                                            "}\n"
+                                            "\\edef\\prebin@plus{\\penalty\\binoppenalty\\mathchar\\the\\mathcode`+\\noexpand\\nobreak}\n"
+                                            "\\edef\\prebin@minus{\\penalty\\binoppenalty\\mathchar\\the\\mathcode`-\\noexpand\\nobreak}\n"
+                                            "\\makeatother\n";
 
 //================================================================================================
 
@@ -235,6 +268,7 @@ void LatexDump(Variables      *vars,
     system("rm -rf *.log");
     system("rm -fr *.aux");
 
+
     FILE *latex_file = fopen(latex_file_name, "w");
     static const size_t kMaxCmdLen = 128;
 
@@ -250,36 +284,58 @@ void LatexDump(Variables      *vars,
 
     #define TEX_PRINT(...) fprintf(latex_file, __VA_ARGS__)
 
-    TEX_PRINT(" \\documentclass[a4paper,12pt]{article}\n"
-                 "\\usepackage[T1]{fontenc}\n"
-                 "\\usepackage[utf8]{inputenc}\n"
-                 "\\usepackage[english,russian]{babel}\n"
-                 "\\usepackage{pdfpages}\n"
-                 "\\usepackage{ragged2e}\n"
-                 "\\title{Лабораторная работа номер 2.2.8}\n"
-                 "\\begin{document}\n"
-                 "\\maketitle\n");
+    TEX_PRINT("\\documentclass[a4paper,14pt]{extarticle}\n"
+              "\\usepackage{graphicx}\n"
+              "\\usepackage{ucs}\n"
+              "\\usepackage[utf8x]{inputenc}\n"
+              "\\usepackage[russian]{babel}\n"
+              "\\usepackage{multirow}\n"
+              "\\usepackage{mathtext}\n"
+              "\\usepackage[T2A]{fontenc}\n"
+              "\\usepackage{titlesec}\n"
+              "\\usepackage{float}\n"
+              "\\usepackage{empheq}\n"
+              "\\usepackage{amsfonts}\n"
+              "\\usepackage{amsmath}\n"
+              "%s\n\\title{Лабораторная работа номер 2.2.8}\n"
+              "\\begin{document}\n"
+              "\\maketitle\n", transpos_latex_string);
 
     PrintMaclaurinSeries(vars, func, latex_file);
+    printf("HUY");
 
     TEX_PRINT("\n\\end{document}");
 
     fclose(latex_file);
-
     sprintf(system_cmd, "iconv -f CP1251 -t UTF-8 %s > c%s", latex_file_name, latex_file_name);
     system(system_cmd);
 
-    sprintf(system_cmd, "pdflatex -interaction nonstopmode -halt-on-error -file-line-error c%s", latex_file_name);
+    sprintf(system_cmd, "pdflatex -interaction=batchmode -halt-on-error -file-line-error c%s", latex_file_name);
     system(system_cmd);
 }
 
 //================================================================================================
 
-TreeErrs_t LatexPrintNode(Variables      *vars,
+TreeErrs_t LatexPrintNode(Replaces       *reps,
+                          Variables      *vars,
                           const TreeNode *node,
                           FILE           *latex_file)
 {
-    #define PRINT_BR(node) PrintWithBrackets(vars, node, latex_file)
+    #define PRINT_BR(node) PrintWithBrackets(reps, vars, node, latex_file)
+
+    /*if (reps != nullptr)
+    {
+        ++(reps->curr_depth);
+
+        if (reps->curr_depth >= 32 && reps->rep_count < 14)
+        {
+            size_t pos = AddReplace(reps, (TreeNode *) node);
+            TEX_PRINT("%C", reps->rep_array[pos].id);
+            reps->curr_depth = 0;
+
+            return kTreeSuccess;
+        }
+    }*/
 
     if (node == nullptr)
     {
@@ -300,26 +356,34 @@ TreeErrs_t LatexPrintNode(Variables      *vars,
         return kTreeSuccess;
     }
 
+    if (node->type == kRepVar)
+    {
+        if (reps != nullptr)
+        {
+            TEX_PRINT("%c", reps->rep_array[node->data.variable_pos].id);
+        }
+    }
+
     switch (node->data.op_code)
     {
         case kAdd:
         {
-            LatexPrintNode(vars, node->left, latex_file);
+            LatexPrintNode(reps, vars, node->left, latex_file);
 
             TEX_PRINT("+");
 
-            LatexPrintNode(vars, node->right, latex_file);
+            LatexPrintNode(reps, vars, node->right, latex_file);
 
             break;
         }
 
         case kSub:
         {
-            LatexPrintNode(vars, node->left, latex_file);
+            LatexPrintNode(reps, vars, node->left, latex_file);
 
             TEX_PRINT("-");
 
-            LatexPrintNode(vars, node->right, latex_file);
+            LatexPrintNode(reps, vars, node->right, latex_file);
 
             break;
         }
@@ -327,11 +391,11 @@ TreeErrs_t LatexPrintNode(Variables      *vars,
         case kDiv:
         {
             TEX_PRINT("%s{", OperationArray[kDiv].tex_str);
-            LatexPrintNode(vars, node->left, latex_file);
+            LatexPrintNode(reps, vars, node->left, latex_file);
             TEX_PRINT("}");
 
             TEX_PRINT("{");
-            LatexPrintNode(vars, node->right, latex_file);
+            LatexPrintNode(reps, vars, node->right, latex_file);
             TEX_PRINT("}");
 
             break;
@@ -355,7 +419,7 @@ TreeErrs_t LatexPrintNode(Variables      *vars,
             TEX_PRINT("^");
 
             TEX_PRINT("{");
-            LatexPrintNode(vars, node->right, latex_file);
+            LatexPrintNode(reps, vars, node->right, latex_file);
             TEX_PRINT("}");
 
             break;
@@ -388,21 +452,24 @@ TreeErrs_t LatexPrintNode(Variables      *vars,
 
 //================================================================================================
 
-static void PrintWithBrackets(Variables *vars, TreeNode *node, FILE *latex_file)
+static void PrintWithBrackets(Replaces *reps,
+                              Variables *vars,
+                              TreeNode *node,
+                              FILE *latex_file)
 {
     if(node->type != kVariable && node->type != kConstNumber)
     {
-        if (!IsUnaryOp(node->data.op_code))
+        if (!IsUnaryOp(node->data.op_code) && node->data.op_code != kMult)
         {
             TEX_PRINT("\\left( ");
         }
     }
 
-    LatexPrintNode(vars, node, latex_file);
+    LatexPrintNode(reps, vars, node, latex_file);
 
     if(node->type != kVariable && node->type != kConstNumber)
     {
-        if (!IsUnaryOp(node->data.op_code))
+        if (!IsUnaryOp(node->data.op_code) && node->data.op_code != kMult)
         {
             TEX_PRINT(" \\right)");
         }
@@ -412,41 +479,51 @@ static void PrintWithBrackets(Variables *vars, TreeNode *node, FILE *latex_file)
 //================================================================================================
 
 TreeErrs_t PrintMaclaurinSeries(Variables *vars,
-                                Tree *func,
-                                FILE *latex_file)
+                                Tree      *func,
+                                FILE      *latex_file)
 {
+
+    PasteImage(latex_file, "fun_img/img1.jpg");
     srand(time(NULL));
     static const size_t kPrecise = 5;
 
     Tree diff_tree = {0};
     diff_tree.root = func->root;
 
-    double coeffs[kPrecise] = {0}; // order
+    double coeffs[kPrecise] = {0};
 
     coeffs[0] = Eval(vars, diff_tree.root);
 
-    TEX_PRINT("$$f(x) = ");
-    LatexPrintNode(vars, diff_tree.root, latex_file);
-    TEX_PRINT("$$\n");
+    TEX_PRINT("\\begin{equation*}\n\\begin{wrapeqn}\n f(x) = ");
+    LatexPrintNode(nullptr, vars, diff_tree.root, latex_file);
+    TEX_PRINT("\\end{wrapeqn}\n\\end{equation*}\n");
 
     for (size_t i = 1; i < kPrecise; i++)
     {
+        Replaces reps;
+        RepCtor(&reps);
+
         TreeNode *tmp = diff_tree.root;
 
         diff_tree.root = DiffTree(diff_tree.root, nullptr);
-        GRAPH_DUMP_TREE(&diff_tree);
-        OptimizeTree(vars, &diff_tree);
-        GRAPH_DUMP_TREE(&diff_tree);
 
         TreeDtor(tmp);
 
+        //GRAPH_DUMP_TREE(&diff_tree);
+        OptimizeTree(vars, &diff_tree);
+        //GRAPH_DUMP_TREE(&diff_tree);
+
         coeffs[i] = Eval(vars, diff_tree.root);
 
+        GRAPH_DUMP_TREE(&diff_tree);
 
         TEX_PRINT("%s\\newline\n", FoolStrings[rand() % kFoolStringsSize]);
-        TEX_PRINT("$$f^{%d}(x) = ", i);
-        LatexPrintNode(vars, diff_tree.root, latex_file);
-        TEX_PRINT("$$\n");
+
+        TEX_PRINT("\\begin{equation*}\n\\begin{wrapeqn}\nf^{%d}(x) = ", i);
+        LatexPrintNode(&reps, vars, diff_tree.root, latex_file);
+        TEX_PRINT("\\end{wrapeqn}\n\\end{equation*}\n");
+
+        PrintReps(&reps, vars, latex_file);
 
         TEX_PRINT("$$f^{%d}(0) = %lg$$", i, Eval(vars, diff_tree.root));
     }
@@ -475,6 +552,18 @@ TreeErrs_t PrintMaclaurinSeries(Variables *vars,
 
 //================================================================================================
 
+static void PasteImage(FILE       *latex_file,
+                       const char *image_name)
+{
+    TEX_PRINT("\\begin{figure}[h]"
+              "\\centering"
+              "\\includegraphics[scale=0.5]{%s}"
+              "\\caption{График функции $u^2(T)$.}"
+              "\\end{figure}", image_name);
+}
+
+//================================================================================================
+
 static int Factorial(int num)
 {
     if (num == 1 || num == 0)
@@ -486,6 +575,88 @@ static int Factorial(int num)
 }
 
 //================================================================================================
+
+static TreeErrs_t RepDtor(Replaces *reps)
+{
+    free(reps->rep_array);
+    reps->curr_depth = 0;
+    reps->rep_count = 0;
+
+    return kTreeSuccess;
+}
+
+static TreeErrs_t RepCtor(Replaces *reps)
+{
+    static size_t kBaseReplaceSize = 16;
+
+    reps->rep_array = (Replace *) calloc(kBaseReplaceSize, sizeof(Replace));
+
+    reps->curr_depth = 0;
+    reps->rep_count  = 0;
+
+    return kTreeSuccess;
+}
+
+//================================================================================================
+
+static size_t kSoBig = 8;
+
+static size_t AddReplace(Replaces *reps, TreeNode *node)
+{
+    reps->rep_array[reps->rep_count].node = node;
+    reps->rep_array[reps->rep_count].id = 'A' + reps->rep_count;
+
+    reps->rep_count++;
+    return reps->rep_count - 1;
+}
+
+//================================================================================================
+
+static TreeErrs_t MakeReplace(Replaces *reps,
+                              size_t    *depth,
+                              TreeNode  **node)
+{
+    if ((*node)->type == kVariable ||
+        (*node)->type == kConstNumber)
+    {
+        return kTreeSuccess;
+    }
+
+    if (*depth >= kSoBig)
+    {
+        size_t pos = AddReplace(reps, *node) - 1;
+
+        *node = NodeCtor(nullptr,
+                         nullptr,
+                         nullptr,
+                         kRepVar,
+                         pos);
+
+        return kTreeSuccess;;
+    }
+
+    *depth++;
+    MakeReplace(reps, depth, &(*node)->left);
+
+    *depth--;
+    MakeReplace(reps, depth, &(*node)->right);
+
+    return kTreeSuccess;
+}
+
+//================================================================================================
+
+static void PrintReps(Replaces *reps,
+                      Variables *vars,
+                      FILE *latex_file)
+{
+    for(size_t i = 0; i < reps->rep_count; i++)
+    {
+        TEX_PRINT("$$%C = ", reps->rep_array[i].id);
+        LatexPrintNode(nullptr, vars, reps->rep_array[i].node, latex_file);
+        TEX_PRINT("$$\\newline\n");
+    }
+}
 
 #undef PRINT_BR
 #undef TEX_PRINT

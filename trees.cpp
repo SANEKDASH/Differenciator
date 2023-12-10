@@ -67,23 +67,20 @@ TreeErrs_t TreeCtor(Tree *tree)
 
 TreeErrs_t TreeDtor(TreeNode *root)
 {
-    if (root == nullptr)
+    if (root != nullptr)
     {
-        return kTreeSuccess;
-    }
+        if (root->left != nullptr)
+        {
+            TreeDtor(root->left);
+        }
 
-    if (root->left != nullptr)
-    {
-        TreeDtor(root->left);
-    }
-
-    if (root->right != nullptr)
-    {
-        TreeDtor(root->right);
+        if (root->right != nullptr)
+        {
+            TreeDtor(root->right);
+        }
     }
 
     free(root);
-
 
     return kTreeSuccess;
 }
@@ -479,80 +476,13 @@ TreeErrs_t SetParents(TreeNode *parent_node)
 
     return kTreeSuccess;
 }
-/*TreeErrs_t SwapNodesData(TreeNode *node_lhs,
-                         TreeNode *node_rhs)
+
+//==============================================================================
+
+TreeErrs_t GetDepth(const TreeNode *node, int *depth)
 {
-    TreeDataType_t tmp = nullptr;
 
-    CHECK(node_lhs);
-    CHECK(node_rhs);
-
-    tmp = node_lhs->data;
-
-    node_lhs->data = node_rhs->data;
-
-    node_rhs->data = tmp;
-
-    return kTreeSuccess;
 }
-*/
-//==============================================================================
-
-/*TreeNode *FindNode(Stack *stk,
-                   TreeNode *node,
-                   TreeDataType_t key)
-{
-    TreeNode *curr_node = nullptr;
-
-    SeekNode(stk, node, &curr_node, key);
-
-    return curr_node;
-}
-*/
-//==============================================================================
-
-/*static void SeekNode(Stack *stk,
-                     TreeNode *node,
-                     TreeNode **ret_node,
-                     TreeDataType_t key)
-{
-    CHECK(stk);
-    CHECK(node);
-    CHECK(ret_node);
-
-    int pop_value = 0;
-
-    if (strcmp(node->data, key) == 0)
-    {
-        *ret_node = node;
-
-        return;
-    }
-
-    // prichesat
-    if (node->left != nullptr && *ret_node == nullptr)
-    {
-        Push(stk, kGoLeft);
-
-        SeekNode(stk, node->left, ret_node, key);
-
-        if (*ret_node == nullptr)
-        {
-            Pop(stk, &pop_value);
-        }
-    }
-
-    if (node->right != nullptr && *ret_node == nullptr)
-    {
-        Push(stk, kGoRight);
-
-        SeekNode(stk, node->right, ret_node, key);
-
-        if (*ret_node == nullptr)
-        {
-            Pop(stk, &pop_value);
-        }
-    }
-}*/
 
 //==============================================================================
+

@@ -28,6 +28,7 @@ typedef enum
     kOperator,
     kConstNumber,
     kVariable,
+    kRepVar,
 } ExpressionType_t;
 
 typedef enum
@@ -112,5 +113,7 @@ TreeNode *CopyNode(const TreeNode *src_node,
                    TreeNode       *parent_node);
 
 TreeErrs_t SetParents(TreeNode *parent_node);
+
+TreeErrs_t GetDepth(const TreeNode *node, int *depth);
 
 #endif
