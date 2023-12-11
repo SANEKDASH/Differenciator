@@ -19,8 +19,8 @@ struct Replace
 struct Replaces
 {
     size_t curr_depth = 0;
-    Replace *rep_array;
-    size_t rep_count;
+    Replace *rep_array = nullptr;
+    size_t rep_count = 0;
 };
 
 
@@ -37,7 +37,8 @@ void LogPrintEdges(TreeNode *node,
                    FILE     *dot_file);
 
 void LatexDump(Variables      *vars,
-               Tree           *func,
+               const Tree     *func,
+               Expr           *expr,
                const char     *latex_file_name);
 
 TreeErrs_t LatexPrintNode(Replaces       *reps,
@@ -45,8 +46,16 @@ TreeErrs_t LatexPrintNode(Replaces       *reps,
                           const TreeNode *node,
                           FILE           *latex_file);
 
-TreeErrs_t PrintMaclaurinSeries(Variables *vars,
-                                Tree      *func,
-                                FILE      *latex_file);
+TreeErrs_t PrintMaclaurinSeries(Variables  *vars,
+                                const Tree *func,
+                                FILE       *latex_file,
+                                Expr       *expr);
+
+void InFixPrintTree(Variables *vars,
+                    TreeNode  *node,
+                    FILE      *output_file);
+
+void MakeGraph(Expr       *expr,
+               const char *output_file_name);
 
 #endif

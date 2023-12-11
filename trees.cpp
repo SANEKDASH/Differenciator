@@ -481,8 +481,9 @@ TreeErrs_t SetParents(TreeNode *parent_node)
 
 TreeErrs_t GetDepth(const TreeNode *node, int *depth)
 {
-
 }
 
 //==============================================================================
+
+
 

@@ -1,12 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <math.h>
 
 #include "debug/debug.h"
 #include "trees.h"
 #include "tree_dump.h"
 #include "diff.h"
 #include "time.h"
+
 
 #define SVG
 
@@ -33,7 +35,8 @@ static const char *FoolStrings[] =
     "Сунул в попу я огурчик, выпил скотч и пукнул в стульчик...\\newline\nA потом получил:",
     "Методом введения ЛСД в вену получили:",
     "Округлим до прямой:",
-    "Очевидно, что:"
+    "Очевидно, что:",
+    "По лемме 9.1:"
 };
 
 static const size_t kFoolStringsSize = sizeof(FoolStrings) / sizeof(char *);
@@ -131,6 +134,7 @@ TreeErrs_t GraphDumpTree(Tree *tree,
               "\tnode[color =\"black\", fontsize=14, shape = Mrecord];\n"
               "\tedge[color = \"red\", fontcolor = \"blue\",fontsize = 12];\n\n\n");
 
+    printf("NODE-> left : %p\n NODE ->right : %p (LINE :%d)\n\n", tree->root->left, tree->root->right, __LINE__);
 
     LogPrintTree(tree->root, dot_file);
 
@@ -141,7 +145,7 @@ TreeErrs_t GraphDumpTree(Tree *tree,
 
     fclose(dot_file);
 
-    //system("iconv -f CP1251 -t UTF-8 tree.dmp.dot > ctree.dmp.dot");
+    system("iconv -f CP1251 -t UTF-8 tree.dmp.dot > ctree.dmp.dot");
 
     sprintf(cmd_command, "dot -Tsvg tree.dmp.dot -o graphdump%d.svg"
                          , call_count);
@@ -217,6 +221,7 @@ static void LogPrintTree(TreeNode *node,
     {
         LogPrintTree(node->right, dot_file);
     }
+
 }
 
 //================================================================================================
@@ -261,7 +266,8 @@ void LogPrintEdges(TreeNode *node,
 //================================================================================================
 
 void LatexDump(Variables      *vars,
-               Tree           *func,
+               const Tree     *func,
+               Expr           *expr,
                const char     *latex_file_name)
 {
     system("rm -rf *.pdf");
@@ -301,7 +307,7 @@ void LatexDump(Variables      *vars,
               "\\begin{document}\n"
               "\\maketitle\n", transpos_latex_string);
 
-    PrintMaclaurinSeries(vars, func, latex_file);
+    PrintMaclaurinSeries(vars, func, latex_file, expr);
     printf("HUY");
 
     TEX_PRINT("\n\\end{document}");
@@ -310,7 +316,7 @@ void LatexDump(Variables      *vars,
     sprintf(system_cmd, "iconv -f CP1251 -t UTF-8 %s > c%s", latex_file_name, latex_file_name);
     system(system_cmd);
 
-    sprintf(system_cmd, "pdflatex -interaction=batchmode -halt-on-error -file-line-error c%s", latex_file_name);
+    sprintf(system_cmd, "pdflatex  -halt-on-error -file-line-error c%s", latex_file_name);
     system(system_cmd);
 }
 
@@ -438,6 +444,7 @@ TreeErrs_t LatexPrintNode(Replaces       *reps,
             break;
         }
 
+        case kNotAnOperation:
         default:
         {
             printf("kavo> OPCODE : %d?\n", node->data.op_code);
@@ -478,69 +485,85 @@ static void PrintWithBrackets(Replaces *reps,
 
 //================================================================================================
 
-TreeErrs_t PrintMaclaurinSeries(Variables *vars,
-                                Tree      *func,
-                                FILE      *latex_file)
+TreeErrs_t PrintMaclaurinSeries(Variables  *vars,
+                                const Tree *func,
+                                FILE       *latex_file,
+                                Expr       *expr)
 {
-
-    PasteImage(latex_file, "fun_img/img1.jpg");
     srand(time(NULL));
+
     static const size_t kPrecise = 5;
 
     Tree diff_tree = {0};
-    diff_tree.root = func->root;
+    diff_tree.root = DiffTree(func->root, nullptr);
 
     double coeffs[kPrecise] = {0};
 
-    coeffs[0] = Eval(vars, diff_tree.root);
-
+    coeffs[0] = Eval(vars, func->root);
+//
     TEX_PRINT("\\begin{equation*}\n\\begin{wrapeqn}\n f(x) = ");
-    LatexPrintNode(nullptr, vars, diff_tree.root, latex_file);
+    LatexPrintNode(nullptr, vars, func->root, latex_file);
     TEX_PRINT("\\end{wrapeqn}\n\\end{equation*}\n");
-
+//func
     for (size_t i = 1; i < kPrecise; i++)
     {
+        coeffs[i] = Eval(vars, diff_tree.root);
+
         Replaces reps;
         RepCtor(&reps);
-
         TreeNode *tmp = diff_tree.root;
 
+        TEX_PRINT("%s\\newline\n", FoolStrings[rand() % kFoolStringsSize]);
+//printf formula
+        TEX_PRINT("\\begin{equation*}\n\\begin{wrapeqn}\nf^{%d}(x) = ", i);
+//
+        LatexPrintNode(&reps, vars, diff_tree.root, latex_file);
+//
+        TEX_PRINT("\\end{wrapeqn}\n\\end{equation*}\n");
+//
+        PrintReps(&reps, vars, latex_file);
+
+        double diff_val = Eval(vars, diff_tree.root);
+
+        if (!isnan(diff_val))
+        {
+            TEX_PRINT("$$f^{%d}(0) = %.3lg$$", i, diff_val);
+        }
+        else
+        {
+            PasteImage(latex_file, "fun_img/img1.jpg");
+
+            TEX_PRINT("В точке 0 $f^{%d}(0)$ не существует. Следовательно в ряд МаклоренаРазложить НЕЛЬЗЯ!\\newline\n", i);
+
+            RepDtor(&reps);
+            TreeDtor(diff_tree.root);
+
+            return kTreeSuccess;
+        }
         diff_tree.root = DiffTree(diff_tree.root, nullptr);
 
         TreeDtor(tmp);
 
-        //GRAPH_DUMP_TREE(&diff_tree);
         OptimizeTree(vars, &diff_tree);
-        //GRAPH_DUMP_TREE(&diff_tree);
 
-        coeffs[i] = Eval(vars, diff_tree.root);
 
         GRAPH_DUMP_TREE(&diff_tree);
-
-        TEX_PRINT("%s\\newline\n", FoolStrings[rand() % kFoolStringsSize]);
-
-        TEX_PRINT("\\begin{equation*}\n\\begin{wrapeqn}\nf^{%d}(x) = ", i);
-        LatexPrintNode(&reps, vars, diff_tree.root, latex_file);
-        TEX_PRINT("\\end{wrapeqn}\n\\end{equation*}\n");
-
-        PrintReps(&reps, vars, latex_file);
-
-        TEX_PRINT("$$f^{%d}(0) = %lg$$", i, Eval(vars, diff_tree.root));
+        RepDtor(&reps);
     }
 
     TEX_PRINT("Ряд Маклорена:\\newline\n$$f(x) = ");
 
     for (size_t i = 0; i < kPrecise; i++)
     {
-        if (coeffs[i] != 0)
+        if (coeffs[i] != 0 && !isnan(coeffs[i]))
         {
             if (i == 0)
             {
-                TEX_PRINT("\\frac{%lg}{%d} +", coeffs[i], Factorial(i));
+                TEX_PRINT("%.3lg +", coeffs[i]);
             }
             else
             {
-                TEX_PRINT("\\frac{%lg}{%d} \\cdot x^{%d} +", coeffs[i], Factorial(i), i);
+                TEX_PRINT("\\frac{%.3lg}{%d} \\cdot x^{%d} +", coeffs[i], Factorial(i), i);
             }
         }
     }
@@ -548,6 +571,8 @@ TreeErrs_t PrintMaclaurinSeries(Variables *vars,
     TEX_PRINT("O(x^%d)$$", kPrecise);
 
     TreeDtor(diff_tree.root);
+
+    return kTreeSuccess;
 }
 
 //================================================================================================
@@ -557,7 +582,7 @@ static void PasteImage(FILE       *latex_file,
 {
     TEX_PRINT("\\begin{figure}[h]"
               "\\centering"
-              "\\includegraphics[scale=0.5]{%s}"
+              "\\includegraphics[scale=0.3]{%s}"
               "\\caption{График функции $u^2(T)$.}"
               "\\end{figure}", image_name);
 }
@@ -584,6 +609,8 @@ static TreeErrs_t RepDtor(Replaces *reps)
 
     return kTreeSuccess;
 }
+
+//================================================================================================
 
 static TreeErrs_t RepCtor(Replaces *reps)
 {
@@ -657,6 +684,71 @@ static void PrintReps(Replaces *reps,
         TEX_PRINT("$$\\newline\n");
     }
 }
+
+//==============================================================================
+
+void InFixPrintTree(Variables *vars,
+                    TreeNode  *node,
+                    FILE      *output_file)
+{
+    if (node == nullptr)
+    {
+        return ;
+    }
+
+    if (node->type != kConstNumber && node->type != kVariable)
+    {
+        fprintf(output_file, "( ");
+    }
+
+    if (node->left != nullptr)
+    {
+        InFixPrintTree(vars, node->left, output_file);
+    }
+
+    if (node->type == kOperator)
+    {
+        fprintf(output_file, "%s ", OperationArray[node->data.op_code].op_str);
+    }
+    else if (node->type == kVariable)
+    {
+        fprintf(output_file, "%s", vars->var_array[node->data.variable_pos]);
+    }
+    else if (node->type == kConstNumber)
+    {
+        fprintf(output_file, "%lg ", node->data.const_val);
+    }
+
+    if (node->right != nullptr)
+    {
+        InFixPrintTree(vars, node->right, output_file);
+    }
+
+    if (node->type != kConstNumber && node->type != kVariable)
+    {
+        fprintf(output_file, ") ");
+    }
+}
+
+//==============================================================================
+
+void MakeGraph(Expr       *expr,
+               const char *output_file_name)
+{
+    FILE *output_file = fopen("plot.txt", "w");
+
+    fprintf(output_file, "set terminal png\n");
+
+    fprintf(output_file, "set output \"%s\"\n", output_file_name);
+
+
+    fprintf(output_file, "plot %s\n", expr->string);
+    fclose(output_file);
+    system("gnuplot plot.txt");
+
+}
+
+
 
 #undef PRINT_BR
 #undef TEX_PRINT

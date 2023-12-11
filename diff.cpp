@@ -572,3 +572,5 @@ static TreeErrs_t ReconnectTree(TreeNode **dest, TreeNode *src)
 
     return kTreeSuccess;
 }
+
+void MakeFuncGraph();

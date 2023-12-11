@@ -12,13 +12,14 @@ int main(int argc, const char *argv[])
     Expr expr;
     Variables vars;
 
+
     const char *output_file_name = "latex.tex";
 
     VarArrayInit(&vars);
 
-    if (argc >= 1)
+    if (argc >= 2)
     {
-        expr.string = argv[1];
+        expr.string = "1/x";
     }
     else
     {
@@ -30,15 +31,17 @@ int main(int argc, const char *argv[])
     expr.pos  = 0;
     Tree func = {0};
 
+
     func.root = GetG(&vars, &expr);
     OptimizeTree(&vars, &func);
-    GRAPH_DUMP_TREE(&func);
 
-    LatexDump(&vars, &func, output_file_name);
+    LatexDump(&vars, &func, &expr, output_file_name);
 
-    VarArrayDtor(&vars);
     EndTreeGraphDump();
+
+    GRAPH_DUMP_TREE(&func);
     TreeDtor(func.root);
+    VarArrayDtor(&vars);
 
     return 0;
 }
